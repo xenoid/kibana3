@@ -30,7 +30,7 @@ function (Settings) {
      *
      */
     //elasticsearch: "http://localhost:9200",
-    elasticsearch: "http://localhost:9500",
+    elasticsearch: window.location.origin,
 
     /** @scratch /configuration/config.js/5
      *
