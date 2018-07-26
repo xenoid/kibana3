@@ -180,6 +180,7 @@ define([
         if(!_.isUndefined(filter.to)) {
           _f = _f.to(kbn.parseDate(filter.to).valueOf());
         }
+        _f.format("epoch_millis");
         return _f;
       case 'range':
         return ejs.RangeFilter(filter.field)
