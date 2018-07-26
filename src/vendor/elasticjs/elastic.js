@@ -8177,6 +8177,22 @@
         return this;
       },
 
+       /**
+            The format of the dates.
+
+            @member ejs.RangeFilter
+            @param {*} t the format of the from and to values
+            @returns {Object} returns <code>this</code> so that calls can be chained.
+            */
+      format: function (t) {
+        if (t == null) {
+          return filter.range[field].format;
+        }
+
+        filter.range[field].format = t;
+        return this;
+      },
+
       /**
             Should the first from (if set) be inclusive or not. 
             Defaults to true
