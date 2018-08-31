@@ -340,7 +340,7 @@ function (angular, app, _, kbn, moment) {
 
       queries = querySrv.getQueryObjs($scope.panel.queries.ids);
 
-      boolQuery = filterSrv.toFilter(filterSrv.ids());
+      boolQuery = filterSrv.getBoolFilter(filterSrv.ids());
 
       boolQuery2 = $scope.ejs.BoolFilter();
       _.each(queries,function(q) {
