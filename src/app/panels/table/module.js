@@ -340,7 +340,7 @@ function (angular, app, _, kbn, moment) {
 
       queries = querySrv.getQueryObjs($scope.panel.queries.ids);
 
-      boolQuery = filterSrv.toFilter(filterSrv.ids());
+      boolQuery = filterSrv.getBoolFilter(filterSrv.ids());
 
       // Put the queries into a separate bool context as should, so we get an OR of the queries
       boolQuery2 = $scope.ejs.BoolFilter();
