@@ -41,7 +41,7 @@ define([
           show: $scope.panel.spyable
         },
         {
-          description: "CSV",
+          description: "Csv",
           icon: "icon-table",
           partial: "app/partials/csv.html",
           show: true,
