@@ -1,4 +1,4 @@
-Sorry guys but I am not supporting this project anymore :/ I know it is an awesome project still better than kibana 6 for some use cases (when you have many sources of similar log and want to replicate dashboard for one to many) but I am doing exciting python stuff instead now.
+My fork actually works with ES 5.x
 
 
 # Kibana
