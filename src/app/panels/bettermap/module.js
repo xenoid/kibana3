@@ -110,6 +110,7 @@ function (angular, app, _, L, localRequire) {
 
     $scope.get_data = function(segment,query_id) {
       	  var boolQuery2; // to help put queries also into filter context
+          var boolQuery;
 
       
       $scope.require(['./leaflet/plugins'], function () {
