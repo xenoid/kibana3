@@ -109,6 +109,15 @@ function (angular, app, _, L, localRequire) {
     };
 
     $scope.get_data = function(segment,query_id) {
+      	  var
+        _segment,
+        request,
+        boolQuery,
+        boolQuery2, // to help put queries also into filter context
+        queries,
+        sort,
+        request2;
+      
       $scope.require(['./leaflet/plugins'], function () {
         $scope.panel.error =  false;
 
