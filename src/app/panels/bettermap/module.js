@@ -138,6 +138,9 @@ function (angular, app, _, L, localRequire) {
         var queries = querySrv.getQueryObjs($scope.panel.queries.ids);
 
         var boolQuery = $scope.ejs.BoolQuery();
+        
+        // Put the queries into a separate bool context as should, so we get an OR of the queries
+      boolQuery2 = $scope.ejs.BoolFilter();
         _.each(queries,function(q) {          
           boolQuery2 = boolQuery2.should(querySrv.toEjsObj(q));
         });
