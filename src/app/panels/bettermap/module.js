@@ -138,10 +138,13 @@ function (angular, app, _, L, localRequire) {
         var queries = querySrv.getQueryObjs($scope.panel.queries.ids);
 
         var boolQuery = $scope.ejs.BoolQuery();
-        _.each(queries,function(q) {
-          boolQuery = boolQuery.should(querySrv.toEjsObj(q));
+        _.each(queries,function(q) {          
+          boolQuery2 = boolQuery2.should(querySrv.toEjsObj(q));
         });
 
+        // put the queries also under filter context to actually perform filtering
+      boolQuery.filter(boolQuery2);
+        
         var request = $scope.ejs.Request().indices(dashboard.indices[_segment])
           .query($scope.ejs.FilteredQuery(
             boolQuery,
