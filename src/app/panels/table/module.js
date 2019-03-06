@@ -586,6 +586,6 @@ function (angular, app, _, kbn, moment) {
     return function(text,event) {
       return moment(event.sort[1]).format("YYYY-MM-DDTHH:mm:ss.SSSZ");
     };
-  });
+  }); 
 
 });
