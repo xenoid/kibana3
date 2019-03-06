@@ -140,7 +140,7 @@ function (angular, app, _, L, localRequire) {
         $scope.panel.queries.ids = querySrv.idsByMode($scope.panel.queries);
         var queries = querySrv.getQueryObjs($scope.panel.queries.ids);
 
-        var boolQuery = $scope.ejs.BoolQuery();
+        boolQuery = filterSrv.toFilter(filterSrv.ids());
         
         // Put the queries into a separate bool context as should, so we get an OR of the queries
         boolQuery2 = $scope.ejs.BoolFilter();
