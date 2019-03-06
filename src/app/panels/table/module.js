@@ -1,88 +1,138 @@
 /** @scratch /panels/5
  *
- * include::panels/bettermap.asciidoc[]
+ * include::panels/table.asciidoc[]
  */
 
-/** @scratch /panels/bettermap/0
+/** @scratch /panels/table/0
  *
- * == Bettermap
- * Status: *Experimental*
+ * == table
+ * Status: *Stable*
  *
- * Bettermap is called bettermap for lack of a better name. Bettermap uses geographic coordinates to
- * create clusters of markers on map and shade them orange, yellow and green depending on the
- * density of the cluster.
+ * The table panel contains a sortable, pagable view of documents that. It can be arranged into
+ * defined columns and offers several interactions, such as performing adhoc terms aggregations.
  *
- * To drill down, click on a cluster. The map will be zoomed and the cluster broken into smaller cluster.
- * When it no longer makes visual sense to cluster, individual markers will be displayed. Hover over
- * a marker to see the tooltip value/
- *
- * IMPORTANT: bettermap requires an internet connection to download its map panels.
  */
 define([
   'angular',
   'app',
   'lodash',
-  './leaflet/leaflet-src',
-  'require',
-
-  'css!./module.css',
-  'css!./leaflet/leaflet.css',
-  'css!./leaflet/plugins.css'
+  'kbn',
+  'moment',
+  'jsonpath'
 ],
-function (angular, app, _, L, localRequire) {
+function (angular, app, _, kbn, moment) {
   'use strict';
 
-  var module = angular.module('kibana.panels.bettermap', []);
+  var module = angular.module('kibana.panels.table', []);
   app.useModule(module);
 
-  module.controller('bettermap', function($scope, querySrv, dashboard, filterSrv) {
+  module.controller('table', function($rootScope, $scope, $modal, $q, $compile, $timeout,
+    fields, querySrv, dashboard, filterSrv) {
     $scope.panelMeta = {
-      editorTabs : [
-        {
-          title: 'Queries',
-          src: 'app/partials/querySelect.html'
-        }
-      ],
       modals : [
         {
           description: "Inspect",
           icon: "icon-info-sign",
           partial: "app/partials/inspector.html",
           show: $scope.panel.spyable
+        },
+        {
+          description: "CSV",
+          icon: "icon-table",
+          partial: "app/partials/csv.html",
+          show: true,
+          click: function() { $scope.csv_data = $scope.to_csv(); }
         }
       ],
-      status  : "Experimental",
-      description : "Displays geo points in clustered groups on a map. The caveat for this panel is"+
-        " that, for better or worse, it does NOT use the terms facet and it <b>does</b> query "+
-        "sequentially. This however means that it transfers more data and is generally heavier to"+
-        " compute, while showing less actual data. If you have a time filter, it will attempt to"+
-        " show to most recent points in your search, up to your defined limit."
+      editorTabs : [
+        {
+          title:'Paging',
+          src: 'app/panels/table/pagination.html'
+        },
+        {
+          title:'Queries',
+          src: 'app/partials/querySelect.html'
+        }
+      ],
+      status: "Stable",
+      description: "A paginated table of records matching your query or queries. Click on a row to "+
+        "expand it and review all of the fields associated with that document. <p>"
     };
 
     // Set and populate defaults
     var _d = {
-      /** @scratch /panels/bettermap/3
-       *
+      /** @scratch /panels/table/5
        * === Parameters
        *
-       * field:: The field that contains the coordinates, in geojson format. GeoJSON is
-       * +[longitude,latitude]+ in an array. This is different from most implementations, which use
-       * latitude, longitude.
+       * size:: The number of hits to show per page
        */
-      field   : null,
-      /** @scratch /panels/bettermap/5
-       * size:: The number of documents to use when drawing the map
+      size    : 100, // Per page
+      /** @scratch /panels/table/5
+       * pages:: The number of pages available
        */
-      size    : 1000,
-      /** @scratch /panels/bettermap/5
-       * spyable:: Should the `inspect` icon be shown?
+      pages   : 5,   // Pages available
+      /** @scratch /panels/table/5
+       * offset:: The current page
+       */
+      offset  : 0,
+      /** @scratch /panels/table/5
+       * sort:: An array describing the sort order of the table. For example [`@timestamp',`desc']
+       */
+      sort    : ['_score','desc'],
+      /** @scratch /panels/table/5
+       * overflow:: The css overflow property. `min-height' (expand) or `auto' (scroll)
+       */
+      overflow: 'min-height',
+      /** @scratch /panels/table/5
+       * fields:: the fields used a columns of the table, in an array.
+       */
+      fields  : [],
+      /** @scratch /panels/table/5
+       * highlight:: The fields on which to highlight, in an array
+       */
+      highlight : [],
+      /** @scratch /panels/table/5
+       * sortable:: Set sortable to false to disable sorting
+       */
+      sortable: true,
+      /** @scratch /panels/table/5
+       * header:: Set to false to hide the table column names
+       */
+      header  : true,
+      /** @scratch /panels/table/5
+       * paging:: Set to false to hide the paging controls of the table
+       */
+      paging  : true,
+      /** @scratch /panels/table/5
+       * field_list:: Set to false to hide the list of fields. The user will be able to expand it,
+       * but it will be hidden by default
+       */
+      field_list: true,
+      /** @scratch /panels/table/5
+       * all_fields:: Set to true to show all fields in the mapping, not just the current fields in
+       * the table.
+       */
+      all_fields: false,
+      /** @scratch /panels/table/5
+       * trimFactor:: The trim factor is the length at which to truncate fields takinging into
+       * consideration the number of columns in the table. For example, a trimFactor of 100, with 5
+       * columns in the table, would trim each column at 20 character. The entirety of the field is
+       * still available in the expanded view of the event.
+       */
+      trimFactor: 300,
+      /** @scratch /panels/table/5
+       * localTime:: Set to true to adjust the timeField to the browser's local time
+       */
+      localTime: false,
+      /** @scratch /panels/table/5
+       * timeField:: If localTime is set to true, this field will be adjusted to the browsers local time
+       */
+      timeField: '@timestamp',
+      /** @scratch /panels/table/5
+       * spyable:: Set to false to disable the inspect icon
        */
       spyable : true,
-      /** @scratch /panels/bettermap/5
-       * tooltip:: Which field to use for the tooltip when hovering over a marker
-       */
-      tooltip : "_id",
-      /** @scratch /panels/bettermap/5
+      /** @scratch /panels/table/5
        *
        * ==== Queries
        * queries object:: This object describes the queries to use on this panel.
@@ -93,110 +143,298 @@ function (angular, app, _, L, localRequire) {
         mode        : 'all',
         ids         : []
       },
+      style   : {'font-size': '9pt'},
+      normTimes : true,
     };
-
     _.defaults($scope.panel,_d);
 
-    // inorder to use relative paths in require calls, require needs a context to run. Without
-    // setting this property the paths would be relative to the app not this context/file.
-    $scope.requireContext = localRequire;
-
-    $scope.init = function() {
-      $scope.$on('refresh',function(){
-        $scope.get_data();
+    $scope.init = function () {
+      $scope.columns = {};
+      _.each($scope.panel.fields,function(field) {
+        $scope.columns[field] = true;
       });
+
+      $scope.Math = Math;
+      $scope.identity = angular.identity;
+      $scope.$on('refresh',function(){$scope.get_data();});
+
+      $scope.fields = fields;
       $scope.get_data();
     };
 
+    // Create a percent function for the view
+    $scope.percent = kbn.to_percent;
+
+    $scope.closeFacet = function() {
+      if($scope.modalField) {
+        delete $scope.modalField;
+      }
+    };
+
+    $scope.termsModal = function(field,chart) {
+      $scope.closeFacet();
+      $timeout(function() {
+        $scope.modalField = field;
+        $scope.adhocOpts = {
+          height: "200px",
+          chart: chart,
+          field: field,
+          span: $scope.panel.span,
+          type: 'terms',
+          title: 'Top 10 terms in field ' + field
+        };
+        showModal(
+          angular.toJson($scope.adhocOpts),'terms');
+      },0);
+    };
+
+    $scope.statsModal = function(field) {
+      $scope.closeFacet();
+      $timeout(function() {
+        $scope.modalField = field;
+        $scope.adhocOpts = {
+          height: "200px",
+          field: field,
+          mode: 'avg',
+          span: $scope.panel.span,
+          type: 'stats',
+          title: 'Statistics for ' + field
+        };
+        showModal(
+          angular.toJson($scope.adhocOpts),'stats');
+      },0);
+    };
+
+    var showModal = function(panel,type) {
+      $scope.facetPanel = panel;
+      $scope.facetType = type;
+    };
+
+    $scope.toggle_micropanel = function(field,groups) {
+      var docs = _.map($scope.data,function(_d){return _d.kibana._source;});
+      var topFieldValues = kbn.top_field_values(docs,field,10,groups);
+      $scope.micropanel = {
+        field: field,
+        grouped: groups,
+        values : topFieldValues.counts,
+        hasArrays : topFieldValues.hasArrays,
+        related : kbn.get_related_fields(docs,field),
+        limit: 10,
+        count: _.countBy(docs,function(doc){return _.contains(_.keys(doc),field);})['true']
+      };
+
+
+      var nodeInfo = $scope.ejs.client.get('/' + dashboard.indices + '/_mapping/field/' + field,
+        undefined, undefined, function(data, status) {
+        console.log(status);
+        return;
+      });
+
+      return nodeInfo.then(function(p) {
+        var types = _.uniq(jsonPath(p, '*.*.*.*.mapping.*.type'));
+        if (_.isArray(types)) {
+          $scope.micropanel.type = types.join(', ');
+        }
+
+
+        if(_.intersection(types, ['long','float','integer','double']).length > 0) {
+          $scope.micropanel.hasStats =  true;
+        }
+      });
+
+    };
+
+    $scope.micropanelColor = function(index) {
+      var _c = ['bar-success','bar-warning','bar-danger','bar-info','bar-primary'];
+      return index > _c.length ? '' : _c[index];
+    };
+
+    $scope.set_sort = function(field) {
+      if($scope.panel.sort[0] === field) {
+        $scope.panel.sort[1] = $scope.panel.sort[1] === 'asc' ? 'desc' : 'asc';
+      } else {
+        $scope.panel.sort[0] = field;
+      }
+      $scope.get_data();
+    };
+
+    $scope.toggle_field = function(field) {
+      if (_.indexOf($scope.panel.fields,field) > -1) {
+        $scope.panel.fields = _.without($scope.panel.fields,field);
+        delete $scope.columns[field];
+      } else {
+        $scope.panel.fields.push(field);
+        $scope.columns[field] = true;
+      }
+    };
+
+    $scope.toggle_highlight = function(field) {
+      if (_.indexOf($scope.panel.highlight,field) > -1) {
+        $scope.panel.highlight = _.without($scope.panel.highlight,field);
+      } else {
+        $scope.panel.highlight.push(field);
+      }
+    };
+
+    $scope.toggle_details = function(row) {
+      row.kibana.details = row.kibana.details ? false : true;
+      row.kibana.view = row.kibana.view || 'table';
+      //row.kibana.details = !row.kibana.details ? $scope.without_kibana(row) : false;
+    };
+
+    $scope.page = function(page) {
+      $scope.panel.offset = page*$scope.panel.size;
+      $scope.get_data();
+    };
+
+    $scope.build_search = function(field,value,negate) {
+      var query;
+      // This needs to be abstracted somewhere
+      if(_.isArray(value)) {
+        query = "(" + _.map(value,function(v){return angular.toJson(v);}).join(" AND ") + ")";
+      } else if (_.isUndefined(value)) {
+        query = '*';
+        negate = !negate;
+      } else {
+        query = angular.toJson(value);
+      }
+      $scope.panel.offset = 0;
+      filterSrv.set({type:'field',field:field,query:query,mandate:(negate ? 'mustNot':'must')});
+    };
+
+    $scope.fieldExists = function(field,mandate) {
+      filterSrv.set({type:'exists',field:field,mandate:mandate});
+    };
+
     $scope.get_data = function(segment,query_id) {
-      $scope.require(['./leaflet/plugins'], function () {
-        $scope.panel.error =  false;
+      var
+        _segment,
+        request,
+        boolQuery,
+        boolQuery2, // to help put queries also into filter context
+        queries,
+        sort,
+        request2;
 
-        // Make sure we have everything for the request to complete
-        if(dashboard.indices.length === 0) {
+      $scope.panel.error =  false;
+
+      // Make sure we have everything for the request to complete
+      if(dashboard.indices.length === 0) {
+        return;
+      }
+
+      sort = [$scope.ejs.Sort($scope.panel.sort[0]).order($scope.panel.sort[1])];
+      if($scope.panel.localTime) {
+        sort.push($scope.ejs.Sort($scope.panel.timeField).order($scope.panel.sort[1]));
+      }
+
+
+      $scope.panelMeta.loading = true;
+
+      _segment = _.isUndefined(segment) ? 0 : segment;
+      $scope.segment = _segment;
+
+      request = $scope.ejs.Request().indices(dashboard.indices[_segment]);
+
+      $scope.panel.queries.ids = querySrv.idsByMode($scope.panel.queries);
+
+      queries = querySrv.getQueryObjs($scope.panel.queries.ids);
+
+      boolQuery = filterSrv.getBoolFilter(filterSrv.ids());
+
+      // Put the queries into a separate bool context as should, so we get an OR of the queries
+      boolQuery2 = $scope.ejs.BoolFilter();
+      _.each(queries,function(q) {
+        boolQuery2 = boolQuery2.should(querySrv.toEjsObj(q));
+      });
+
+      // put the queries also under filter context to actually perform filtering
+      boolQuery.filter(boolQuery2);
+
+      request.query(boolQuery)
+        .highlight(
+          $scope.ejs.Highlight($scope.panel.highlight)
+          .fragmentSize(2147483647) // Max size of a 32bit unsigned int
+          .preTags('@start-highlight@')
+          .postTags('@end-highlight@')
+        )
+        .size($scope.panel.size*$scope.panel.pages)
+        .sort(sort);
+
+      $scope.populate_modal(request);
+
+      // Populate scope when we have results
+      request.doSearch().then(function(results) {
+        $scope.panelMeta.loading = false;
+
+        if(_segment === 0) {
+          $scope.panel.offset = 0;
+          $scope.hits = 0;
+          $scope.data = [];
+          $scope.current_fields = [];
+          query_id = $scope.query_id = new Date().getTime();
+        }
+
+        // Check for error and abort if found
+        if(!(_.isUndefined(results.error))) {
+          $scope.panel.error = $scope.parse_error(results.error);
           return;
         }
 
-        if(_.isUndefined($scope.panel.field)) {
-          $scope.panel.error = "Please select a field that contains geo point in [lon,lat] format";
-          return;
-        }
+        // Check that we're still on the same query, if not stop
+        if($scope.query_id === query_id) {
 
-        // Determine the field to sort on
-        var timeField = _.uniq(_.pluck(filterSrv.getByType('time'),'field'));
-        if(timeField.length > 1) {
-          $scope.panel.error = "Time field must be consistent amongst time filters";
-        } else if(timeField.length === 0) {
-          timeField = null;
+          // This is exceptionally expensive, especially on events with a large number of fields
+          $scope.data = $scope.data.concat(_.map(results.hits.hits, function(hit) {
+            var
+              _h = _.clone(hit),
+              _p = _.omit(hit,'_source','sort','_score');
+
+            // _source is kind of a lie here, never display it, only select values from it
+            _h.kibana = {
+              _source : _.extend(kbn.flatten_json(hit._source),_p),
+              highlight : kbn.flatten_json(hit.highlight||{})
+            };
+
+            // Kind of cheating with the _.map here, but this is faster than kbn.get_all_fields
+            $scope.current_fields = $scope.current_fields.concat(_.keys(_h.kibana._source));
+
+            return _h;
+          }));
+
+          $scope.current_fields = _.uniq($scope.current_fields);
+          $scope.hits += results.hits.total;
+
+          // Sort the data
+          $scope.data = _.sortBy($scope.data, function(v){
+            if(!_.isUndefined(v.sort)) {
+              return v.sort[0];
+            } else {
+              return v._score;
+            }
+          });
+
+          // Reverse if needed
+          if($scope.panel.sort[1] === 'desc') {
+            $scope.data.reverse();
+          }
+
+          // Keep only what we need for the set
+          $scope.data = $scope.data.slice(0,$scope.panel.size * $scope.panel.pages);
+
         } else {
-          timeField = timeField[0];
+          return;
         }
 
-        var _segment = _.isUndefined(segment) ? 0 : segment;
-
-        $scope.panel.queries.ids = querySrv.idsByMode($scope.panel.queries);
-        var queries = querySrv.getQueryObjs($scope.panel.queries.ids);
-
-        var boolQuery = $scope.ejs.BoolQuery();
-        _.each(queries,function(q) {
-          boolQuery = boolQuery.should(querySrv.toEjsObj(q));
-        });
-
-        var request = $scope.ejs.Request().indices(dashboard.indices[_segment])
-          .query($scope.ejs.FilteredQuery(
-            boolQuery,
-            filterSrv.getBoolFilter(filterSrv.ids()).must($scope.ejs.ExistsFilter($scope.panel.field))
-          ))
-          .fields([$scope.panel.field,$scope.panel.tooltip])
-          .size($scope.panel.size);
-
-        if(!_.isNull(timeField)) {
-          request = request.sort(timeField,'desc');
+        // If we're not sorting in reverse chrono order, query every index for
+        // size*pages results
+        // Otherwise, only get size*pages results then stop querying
+        if (($scope.data.length < $scope.panel.size*$scope.panel.pages ||
+          !((_.contains(filterSrv.timeField(),$scope.panel.sort[0])) && $scope.panel.sort[1] === 'desc')) &&
+          _segment+1 < dashboard.indices.length) {
+          $scope.get_data(_segment+1,$scope.query_id);
         }
 
-        $scope.populate_modal(request);
-
-        var results = request.doSearch();
-
-        // Populate scope when we have results
-        results.then(function(results) {
-          $scope.panelMeta.loading = false;
-
-          if(_segment === 0) {
-            $scope.hits = 0;
-            $scope.data = [];
-            query_id = $scope.query_id = new Date().getTime();
-          }
-
-          // Check for error and abort if found
-          if(!(_.isUndefined(results.error))) {
-            $scope.panel.error = $scope.parse_error(results.error);
-            return;
-          }
-
-          // Check that we're still on the same query, if not stop
-          if($scope.query_id === query_id) {
-
-            // Keep only what we need for the set
-            $scope.data = $scope.data.slice(0,$scope.panel.size).concat(_.map(results.hits.hits, function(hit) {
-              return {
-                coordinates : new L.LatLng(hit.fields[$scope.panel.field][1],hit.fields[$scope.panel.field][0]),
-                tooltip : hit.fields[$scope.panel.tooltip]
-              };
-            }));
-
-          } else {
-            return;
-          }
-
-          $scope.$emit('draw');
-
-          // Get $size results then stop querying
-          if($scope.data.length < $scope.panel.size && _segment+1 < dashboard.indices.length) {
-            $scope.get_data(_segment+1,$scope.query_id);
-          }
-
-        });
       });
     };
 
@@ -204,72 +442,152 @@ function (angular, app, _, L, localRequire) {
       $scope.inspector = angular.toJson(JSON.parse(request.toString()),true);
     };
 
-  });
+    $scope.without_kibana = function (row) {
+      var _c = _.clone(row);
+      delete _c.kibana;
+      return _c;
+    };
 
-  module.directive('bettermap', function() {
-    return {
-      restrict: 'A',
-      link: function(scope, elem) {
-        elem.html('<center><img src="img/load_big.gif"></center>');
+    $scope.set_refresh = function (state) {
+      $scope.refresh = state;
+    };
 
-        // Receive render events
-        scope.$on('draw',function(){
-          render_panel();
-        });
+    $scope.close_edit = function() {
+      if($scope.refresh) {
+        $scope.get_data();
+      }
+      $scope.columns = [];
+      _.each($scope.panel.fields,function(field) {
+        $scope.columns[field] = true;
+      });
+      $scope.refresh =  false;
+    };
 
-        scope.$on('render', function(){
-          if(!_.isUndefined(map)) {
-            map.invalidateSize();
-            map.getPanes();
-          }
-        });
-
-        var map, layerGroup;
-
-        function render_panel() {
-          elem.css({height:scope.panel.height||scope.row.height});
-
-          scope.require(['./leaflet/plugins'], function () {
-            scope.panelMeta.loading = false;
-            L.Icon.Default.imagePath = 'app/panels/bettermap/leaflet/images';
-            if(_.isUndefined(map)) {
-              map = L.map(scope.$id, {
-                scrollWheelZoom: false,
-                center: [40, -86],
-                zoom: 10
-              });
-
-              // This could be made configurable?
-              L.tileLayer('http://otile1.mqcdn.com/tiles/1.0.0/map/{z}/{x}/{y}.jpg', {
-                attribution: 'Data, imagery and map information provided by MapQuest, '+
-                  'OpenStreetMap <http://www.openstreetmap.org/copyright> and contributors, ODbL',
-                maxZoom: 18,
-                minZoom: 2
-              }).addTo(map);
-              layerGroup = new L.MarkerClusterGroup({maxClusterRadius:30});
-            } else {
-              layerGroup.clearLayers();
-            }
-
-            var markerList = [];
-
-            _.each(scope.data, function(p) {
-              if(!_.isUndefined(p.tooltip) && p.tooltip !== '') {
-                markerList.push(L.marker(p.coordinates).bindLabel(_.isArray(p.tooltip) ? p.tooltip[0] : p.tooltip));
-              } else {
-                markerList.push(L.marker(p.coordinates));
-              }
-            });
-
-            layerGroup.addLayers(markerList);
-
-            layerGroup.addTo(map);
-
-            map.fitBounds(_.pluck(scope.data,'coordinates'));
-          });
+    $scope.locate = function(obj, path) {
+      path = path.split('.');
+      var arrayPattern = /(.+)\[(\d+)\]/;
+      for (var i = 0; i < path.length; i++) {
+        var match = arrayPattern.exec(path[i]);
+        if (match) {
+          obj = obj[match[1]][parseInt(match[2],10)];
+        } else {
+          obj = obj[path[i]];
         }
       }
+      return obj;
+    };
+
+    $scope.to_csv = function() {
+      var headers, rows, csv, fields;
+
+      headers = [];
+      rows = [];
+      csv = [];
+
+      if ($scope.panel.fields.length === 0) {
+        fields = $scope.fields.list;
+      } else {
+        fields = $scope.panel.fields;
+      }
+
+      _.each(fields, function(field) {
+        headers.push('"' + field + '"');
+      });
+
+      rows.push(headers);
+
+      _.each($scope.data, function(event) {
+        rows.push(_.map(fields, function(field) {
+          var value = event.kibana._source[field];
+
+          if (_.isUndefined(value)) {
+            return "";
+          } else {
+            return '"' + value + '"';
+          }
+        }));
+      });
+
+      _.each(rows, function(row) {
+        csv.push(row.join(","));
+      });
+
+      return csv.join("\n") + "\n";
+    };
+
+    $scope.download_csv = function() {
+      var blob = new Blob([$scope.csv_data], { type: "text/csv" });
+      // from filesaver.js
+      window.saveAs(blob, $scope.panel.title + ".csv");
+      return true;
+    };
+
+  });
+
+  // This also escapes some xml sequences
+  module.filter('tableHighlight', function() {
+    return function(text) {
+      if (!_.isUndefined(text) && !_.isNull(text) && text.toString().length > 0) {
+        return text.toString().
+          replace(/&/g, '&amp;').
+          replace(/</g, '&lt;').
+          replace(/>/g, '&gt;').
+          replace(/\r?\n/g, '<br/>').
+          replace(/@start-highlight@/g, '<code class="highlight">').
+          replace(/@end-highlight@/g, '</code>');
+      }
+      return '';
     };
   });
+
+  module.filter('tableTruncate', function() {
+    return function(text,length,factor) {
+      if (!_.isUndefined(text) && !_.isNull(text) && text.toString().length > 0) {
+        return text.length > length/factor ? text.substr(0,length/factor)+'...' : text;
+      }
+      return '';
+    };
+  });
+
+
+
+  module.filter('tableJson', function() {
+    var json;
+    return function(text,prettyLevel) {
+      if (!_.isUndefined(text) && !_.isNull(text) && text.toString().length > 0) {
+        json = angular.toJson(text,prettyLevel > 0 ? true : false);
+        json = json.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+        if(prettyLevel > 1) {
+          /* jshint maxlen: false */
+          json = json.replace(/("(\\u[a-zA-Z0-9]{4}|\\[^u]|[^\\"])*"(\s*:)?|\b(true|false|null)\b|-?\d+(?:\.\d*)?(?:[eE][+\-]?\d+)?)/g, function (match) {
+            var cls = 'number';
+            if (/^"/.test(match)) {
+              if (/:$/.test(match)) {
+                cls = 'key strong';
+              } else {
+                cls = '';
+              }
+            } else if (/true|false/.test(match)) {
+              cls = 'boolean';
+            } else if (/null/.test(match)) {
+              cls = 'null';
+            }
+            return '<span class="' + cls + '">' + match + '</span>';
+          });
+        }
+        return json;
+      }
+      return '';
+    };
+  });
+
+  // WIP
+  module.filter('tableLocalTime', function(){
+    return function(text,event) {
+      return moment(event.sort[1]).format("YYYY-MM-DDTHH:mm:ss.SSSZ");
+    };
+  });
+
+
 
 });
