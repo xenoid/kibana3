@@ -109,10 +109,6 @@ function (angular, app, _, L, localRequire) {
     };
 
     $scope.get_data = function(segment,query_id) {
-      	  var boolQuery2; // to help put queries also into filter context
-          var boolQuery;
-
-      
       $scope.require(['./leaflet/plugins'], function () {
         $scope.panel.error =  false;
 
@@ -141,17 +137,11 @@ function (angular, app, _, L, localRequire) {
         $scope.panel.queries.ids = querySrv.idsByMode($scope.panel.queries);
         var queries = querySrv.getQueryObjs($scope.panel.queries.ids);
 
-        boolQuery = filterSrv.toFilter(filterSrv.ids());
-        
-        // Put the queries into a separate bool context as should, so we get an OR of the queries
-        boolQuery2 = $scope.ejs.BoolFilter();
-        _.each(queries,function(q) {          
-          boolQuery2 = boolQuery2.should(querySrv.toEjsObj(q));
+        var boolQuery = $scope.ejs.BoolQuery();
+        _.each(queries,function(q) {
+          boolQuery = boolQuery.should(querySrv.toEjsObj(q));
         });
 
-        // put the queries also under filter context to actually perform filtering
-      boolQuery.filter(boolQuery2);
-        
         var request = $scope.ejs.Request().indices(dashboard.indices[_segment])
           .query($scope.ejs.FilteredQuery(
             boolQuery,
@@ -282,4 +272,4 @@ function (angular, app, _, L, localRequire) {
     };
   });
 
-}); 
+});
