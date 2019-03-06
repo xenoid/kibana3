@@ -282,4 +282,4 @@ function (angular, app, _, L, localRequire) {
     };
   });
 
-});
+}); 
