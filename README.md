@@ -1,7 +1,4 @@
-My fork actually works with ES 5.x AND 6.x
-
-
-# Kibana
+# Kibana 3
 This is my fork of Kibana 3 which works with Elasticsearch 5 AND 6. 
 
 
