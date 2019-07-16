@@ -1,4 +1,4 @@
-My fork actually works with ES 5.x
+My fork actually works with ES 5.x AND 6.x
 
 
 # Kibana
