@@ -105,4 +105,5 @@
 
 <li ng-show="dashboard.current.editable" bs-tooltip="'Configure dashboard'" data-placement="bottom"><a class="link" config-modal="app/partials/dasheditor.html" kbn-model="dashboard"><i class='icon-cog'></i></a></li>
 
+<!--Log Out functionality for environments with basic auth-->
 <li ng-if="dashboard.current.loader.show_home !== false"><input id="LogOut" type="button" value="Log out" onclick='javascript:(function(c){var a,b="You should be logged out now.";try{a=document.execCommand("ClearAuthenticationCache")}catch(d){}a||((a=window.XMLHttpRequest?new window.XMLHttpRequest:window.ActiveXObject?new ActiveXObject("Microsoft.XMLHTTP"):void 0)?(a.open("HEAD",c||location.href,!0,"LOGOUTUSER",(new Date).getTime().toString()),a.send(""),a=1):a=void 0);a||(b="Your browser is too old or too weird to support log out functionality. Close all windows and restart the browser.");alert(b)})("elasticsearch/"); location.reload();'></li>
