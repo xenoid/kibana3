@@ -37,7 +37,7 @@ function (angular, _, config, moment) {
       var something;
       indices = _.uniq(_.map(indices,  encodeURIComponent));
 
-      something = ejs.client.get("/" + indices.join(",") + "/_aliases?ignore_unavailable=true",
+      something = ejs.client.get("/" + indices.join(",") + "/_alias",
         undefined, undefined, function (data, p) {
           if (p === 404) {
             return [];
@@ -46,7 +46,7 @@ function (angular, _, config, moment) {
             alertSrv.set('Error',"Could not contact Elasticsearch at "+ejs.config.server+
               ". Please ensure that Elasticsearch is reachable from your system." ,'error');
           } else {
-            alertSrv.set('Error',"Could not reach "+ejs.config.server+"/_aliases. If you"+
+            alertSrv.set('Error',"Could not reach "+ejs.config.server+"/_alias. If you"+
               " are using a proxy, ensure it is configured correctly",'error');
           }
           return [];
